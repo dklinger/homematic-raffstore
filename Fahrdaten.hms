@@ -1,0 +1,205 @@
+object dp = dom.GetObject("$src$");
+integer chID = dp.Channel();
+! Kanalobjekt
+object ch = dom.GetObject(chID);
+integer devID = ch.Device();
+! Geräteobjekt
+object dev = dom.GetObject(devID);
+
+!Serialnumber + Kanalnummer: ch.Address()
+
+var raffstore_ID = dev.Address();
+string raffstore = "";
+string r = "";
+foreach(r, dom.GetObject(ID_SYSTEM_VARIABLES).EnumNames())
+{
+    if(r.StartsWith("raff_ID_"))
+    {
+        if(dom.GetObject(r).Value() == raffstore_ID)
+        {
+            raffstore = r.Replace("raff_ID_", "");
+        }
+    }
+}
+
+var jt_level = dom.GetObject("BidCos-RF." + raffstore_ID + ":1.LEVEL");
+var jt_level_value = jt_level.Value() * 100;
+
+var jt_LetzteFahrtRichtung= dom.GetObject("raff_letzte_fahrt_richtung_" + raffstore);
+var jt_LetzteFahrtRichtung_value = jt_LetzteFahrtRichtung.Value();
+
+var jt_LetzteFahrtLevel= dom.GetObject("raff_letzte_fahrt_hoehe_" + raffstore);
+var jt_LetzteFahrtLevel_value = jt_LetzteFahrtLevel.Value();
+
+var jt_winkel_aktuell = dom.GetObject("raff_lamellenstand_aktuell_" + raffstore);
+var _winkel_aktuell_value = jt_winkel_aktuell.Value();
+
+var jt_winkel_ueberstand = dom.GetObject("raff_lamelle_ueberstand_" + raffstore);
+var _winkel_ueberstand_value = jt_winkel_ueberstand.Value();
+
+var fahrtrichtung = 0.0;
+var fahrtStrecke = 0.0;
+var relativeFahrtStrecke = 0.0;
+var winkel = 0.0;
+var ueberstand = 0.0;
+var stufen = 2.0;
+!var ganzeStufe = 2.5;
+!if(raffstore == "Buero-Balkontuer")
+!{
+!    ganzeStufe = 3.0;!Balkontuer
+!}
+!elseif(raffstore == "Buero-Balkonfenster")
+!{
+!    ganzeStufe = 6.0; !Balkonfenster
+!}
+var ganzeStufe = dom.GetObject("raff_ganzeStufe_" + raffstore).Value();
+
+var einzelneStufe = ganzeStufe / stufen;
+
+ueberstand = _winkel_ueberstand_value / 100;
+
+if(jt_LetzteFahrtLevel_value < jt_level_value)
+{
+      fahrtrichtung = 1; !nach oben
+      fahrtStrecke = jt_level_value - jt_LetzteFahrtLevel_value;
+}
+elseif(jt_LetzteFahrtLevel_value > jt_level_value)
+{
+      fahrtrichtung = 0; !nach unten
+      fahrtStrecke = jt_LetzteFahrtLevel_value - jt_level_value;
+}
+else
+{
+    quit;
+}
+
+dom.GetObject("raff_letzte_fahrt_richtung_" + raffstore).State(fahrtrichtung); !Fahrtrichtung wegschreiben
+dom.GetObject("raff_letzte_fahrt_hoehe_" + raffstore).State(jt_level_value); !Aktuellen Level wegschreiben
+
+if(jt_level_value == 0)
+{
+    dom.GetObject("raff_lamellenstand_aktuell_" + raffstore).State(0); !Aktuellen Winkel wegschreiben
+    dom.GetObject("raff_lamelle_ueberstand_" + raffstore).State(0); !Ueberstand Winkel wegschreiben
+}
+elseif(jt_level_value == 100)
+{
+    dom.GetObject("raff_lamellenstand_aktuell_" + raffstore).State(2); !Aktuellen Winkel wegschreiben
+    dom.GetObject("raff_lamelle_ueberstand_" + raffstore).State(0); !Ueberstand Winkel wegschreiben
+}
+else
+{
+
+    relativeFahrtStrecke = fahrtStrecke;
+    
+    var gleicheRichtung = false;
+    if(jt_LetzteFahrtRichtung_value == fahrtrichtung)
+    {
+        gleicheRichtung = true;
+    
+        if(fahrtrichtung == 1)
+        {   
+            ! nach oben
+            fahrtStrecke = (_winkel_aktuell_value * einzelneStufe + ueberstand) + fahrtStrecke;
+        }
+        else
+        {
+            !nach unten
+            fahrtStrecke = ((stufen - _winkel_aktuell_value) * einzelneStufe + ueberstand) + fahrtStrecke;
+        }
+    }
+    !else
+    !{
+    !    if(fahrtrichtung == 1)
+    !    {
+    !        ! fahrt nach oben
+    !        fahrtStrecke = fahrtStrecke - 0.23;
+    !    }
+    !    else
+    !    {
+    !        ! fahrt nach unten
+    !        fahrtStrecke = fahrtStrecke + 0.23;
+    !    }
+    !}
+    
+    if(fahrtStrecke >= ganzeStufe)
+    {
+        if(fahrtrichtung == 1)
+        {
+            winkel = stufen;
+            ueberstand = 0;
+        }
+        else
+        {
+            winkel = 0;
+            ueberstand = 0;
+        }
+    }
+    else
+    {
+        fahrtStreckeGanzzahl = (relativeFahrtStrecke / einzelneStufe).Floor();
+    
+        if(fahrtrichtung == 1)
+        {   
+            ! nach oben
+            winkel = _winkel_aktuell_value + fahrtStreckeGanzzahl;
+        }
+        else
+        {
+            !nach unten
+            winkel = _winkel_aktuell_value - fahrtStreckeGanzzahl;
+        }
+        
+        ! Ggf. Umbau von Verwendung des Ueberstands zu Winkel mit Kommazahl
+        ueberstand = ((relativeFahrtStrecke*1000) % (einzelneStufe)*1000) / 1000;
+        if(fahrtrichtung == 0)
+        {
+            !winkel = stufen - winkel;
+            ueberstand = ueberstand * -1;
+        }
+    }
+    
+    ueberstand = ueberstand * 100;
+
+    dom.GetObject("raff_lamellenstand_aktuell_" + raffstore).State(winkel); !Aktuellen Winkel wegschreiben
+    dom.GetObject("raff_lamelle_ueberstand_" + raffstore).State(ueberstand); !Ueberstand Winkel wegschreiben
+}
+
+if(dom.GetObject("BidCos-RF." + raffstore_ID + ":1.WORKING").Value() == false)
+{
+    var winkel_neu = dom.GetObject("raff_lamellenstand_soll_" + raffstore);
+    var winkel_neu_value = winkel_neu.Value();
+    
+    if(raffstore.Contains("Wohn-"))
+    {
+        if(dom.GetObject("Raffstore-Modus-Wohnzimmer" + raffstore).Value() == 1)
+        {
+            dom.GetObject("raff_lamellenstand_soll_" + raffstore).State(winkel_neu_value);
+        }
+    }
+    elseif(raffstore.Contains("Buero-"))
+    {
+        if(dom.GetObject("Raffstore-Modus-Buero").Value() == 1)
+        {
+            dom.GetObject("raff_lamellenstand_soll_" + raffstore).State(winkel_neu_value);
+        }
+    }
+    elseif(raffstore.EndsWith("Schlafzimmer"))
+    {
+        if(dom.GetObject("Raffstore-Modus-Schlafzimmer").Value() == 1)
+        {
+            dom.GetObject("raff_lamellenstand_soll_" + raffstore).State(winkel_neu_value);
+        }
+    }
+    elseif(raffstore.Contains("Kind"))
+    {
+        if(dom.GetObject("Raffstore-Modus-Kinderzimmer").Value() == 1)
+        {
+            dom.GetObject("raff_lamellenstand_soll_" + raffstore).State(winkel_neu_value);
+        }
+    }
+    else
+    {
+        dom.GetObject("raff_lamellenstand_soll_" + raffstore).State(winkel_neu_value);
+    }
+    ! quit;
+}
