@@ -171,7 +171,7 @@ if(dom.GetObject("BidCos-RF." + raffstore_ID + ":1.WORKING").Value() == false)
     
     if(raffstore.Contains("Wohn-"))
     {
-        if(dom.GetObject("Raffstore-Modus-Wohnzimmer" + raffstore).Value() == 1)
+        if(dom.GetObject("Raffstore-Modus-Wohnzimmer").Value() == 1)
         {
             dom.GetObject("raff_lamellenstand_soll_" + raffstore).State(winkel_neu_value);
         }
